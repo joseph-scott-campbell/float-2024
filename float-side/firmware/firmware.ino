@@ -27,13 +27,24 @@ uint8_t recording_cycle = 0;      // keep track of what index to write to
 
 bool hall_effect_triggered = false;
 
+
 void IRAM_ATTR record_depth() {
   // get depth data
   // still waiting for proper cable to arrive
-  // placeholder
+  
+  // depth data is stored in 1 dimension
+  // data is sampled in 5 second increments
   depth_data[recording_cycle] = 35;
   recording_cycle++;
 }
+
+void hall_effect() {
+  // DO NOT REMOVE FUNCTION
+  // WILL CAUSE HARDWARE DAMMAGE
+  digitalWrite(ENABLE, LOW);
+  hall_effect_triggered = true;
+}
+
 
 void setup() {
   // setting up interupts
@@ -70,7 +81,6 @@ void setup() {
   Serial.print("Is server live? ");
   Serial.println(server.available());
 }
-
 
 void loop() {
   bool looping = true;                        // allows clean break from loop
@@ -110,6 +120,55 @@ void loop() {
   }
 }
 
+void profile() {
+  hall_effect_triggered = false;
+  // this function works because of hall_effect() interrupt
+  // DON'T GET RID OF hall_effect() INTERRUPT
+  // WILL CAUSE HARDWARE DAMMAGE
+  descend();  // retracting piston
+
+  // possible future feature update: use depth rather than time for sinking
+  delay(10000);  // giving float 10 seconds to sink
+
+  ascend();  // pusing piston out
+}
+
+void ascend() {  
+  hall_effect_triggered = false;
+  digitalWrite(PHASE, LOW);
+  digitalWrite(ENABLE, HIGH);
+  Serial.println(hall_effect_triggered);
+
+  // continuing to move piston until hall effect or timeout
+  unsigned short counter = 0;
+  while (not(hall_effect_triggered) && counter < TIMEOUT) {
+    counter++;
+    Serial.println(counter);
+    delay(1);
+  }
+  if (counter >= TIMEOUT - 1) {
+    fail_state();
+  }
+}
+
+void descend() {
+  hall_effect_triggered = false;
+  digitalWrite(PHASE, HIGH);
+  digitalWrite(ENABLE, HIGH);
+  Serial.println("foo");
+  Serial.println(hall_effect_triggered);
+
+  // continuing to move piston until hall effect or timeout
+  unsigned short counter = 0;
+  while (not(hall_effect_triggered) && counter < TIMEOUT) {
+    counter++;
+    delay(1);
+  }
+  if (counter >= TIMEOUT - 1) {
+    fail_state();
+  }
+}
+
 void fail_state() {
   // stops motor from moving and doing dammage
   digitalWrite(ENABLE, LOW);
@@ -129,63 +188,4 @@ void fail_state() {
     pixels.show();
     delay(500);
   }
-}
-
-void hall_effect() {
-  // DO NOT REMOVE FUNCTION
-  // WILL CAUSE HARDWARE DAMMAGE
-  digitalWrite(ENABLE, LOW);
-  hall_effect_triggered = true;
-}
-
-void ascend() {  
-  hall_effect_triggered = false;
-  digitalWrite(PHASE, LOW);
-  digitalWrite(ENABLE, HIGH);
-  Serial.println(hall_effect_triggered);
-
-  // continuing to move piston until hall effect or timeout
-  unsigned short counter = 0;
-  while (not(hall_effect_triggered) && counter < TIMEOUT) {
-    counter++;
-    Serial.println(counter);
-    delay(1);
-  }
-  if (counter >= 9999) {
-    fail_state();
-  }
-
-  hall_effect_triggered = false;
-
-}
-
-void descend() {
-  hall_effect_triggered = false;
-  digitalWrite(PHASE, HIGH);
-  digitalWrite(ENABLE, HIGH);
-  Serial.println("foo");
-  Serial.println(hall_effect_triggered);
-
-  // continuing to move piston until hall effect or timeout
-  unsigned short counter = 0;
-  while (not(hall_effect_triggered) && counter < TIMEOUT) {
-    counter++;
-    delay(1);
-  }
-  if (counter >= 9999) {
-    fail_state();
-  }
-}
-
-void profile() {
-  hall_effect_triggered = false;
-  // this function works because of hall_effect() interrupt
-  // DON'T GET RID OF hall_effect() INTERRUPT
-  // WILL CAUSE HARDWARE DAMMAGE
-  descend();  // retracting piston
-
-  // possible future feature update: use depth rather than time for sinking
-  delay(10000);  // giving float 10 seconds to sink
-
-  ascend();  // pusing piston out
 }
