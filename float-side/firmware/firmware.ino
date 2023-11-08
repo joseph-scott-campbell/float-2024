@@ -26,6 +26,7 @@ unsigned short depth_data[1000];  // array where depth data will be kept
 uint8_t recording_cycle = 0;      // keep track of what index to write to
 
 bool hall_effect_triggered = false;
+Adafruit_NeoPixel pixels(1, PIN_NEOPIXEL, NEO_GRB + NEO_KHZ800);
 
 
 void IRAM_ATTR record_depth() {
@@ -58,6 +59,12 @@ void setup() {
   // DO NOT REMOVE, WILL CAUSE HARDWARE DAMMAGE
   attachInterrupt(digitalPinToInterrupt(HALL_EFFECT), hall_effect, FALLING);
 
+  pinMode(NEOPIXEL_POWER, OUTPUT);
+  digitalWrite(NEOPIXEL_POWER, HIGH);
+
+  pixels.begin();
+
+
   // Setting up GPIO
   pinMode(ENABLE, OUTPUT);
   pinMode(PHASE, OUTPUT);
@@ -83,8 +90,14 @@ void setup() {
 }
 
 void loop() {
+  pixels.fill(0x0000FF);
+  pixels.show();
+
   bool looping = true;                        // allows clean break from loop
   WebsocketsClient client = server.accept();  // accepting websockets connection
+  pixels.fill(0x00FF00);
+  pixels.show();
+
   if (client.available()) {
     while (looping) {
       WebsocketsMessage msg = client.readBlocking();
@@ -93,10 +106,9 @@ void loop() {
       // uses if statement because switch statements want chars
       if (msg.data() == "profile") {
         client.send("going down");
-        profile();
         looping = false;
         client.close();  // closing client because connection will time out once it goes underwater
-        // profile();
+        profile();
       } else if (msg.data() == "break") {
         client.send("goodbye");
         looping = false;
@@ -121,6 +133,10 @@ void loop() {
 }
 
 void profile() {
+  // setting color to purple to indicate
+  pixels.fill(0xFF00FF);
+  pixels.show();
+
   hall_effect_triggered = false;
   // this function works because of hall_effect() interrupt
   // DON'T GET RID OF hall_effect() INTERRUPT
@@ -173,17 +189,13 @@ void fail_state() {
   // stops motor from moving and doing dammage
   digitalWrite(ENABLE, LOW);
 
-  Adafruit_NeoPixel pixels(1, PIN_NEOPIXEL, NEO_GRB + NEO_KHZ800);
-  pinMode(NEOPIXEL_POWER, OUTPUT);
-  digitalWrite(NEOPIXEL_POWER, HIGH);
-
-  pixels.begin();
-
+  // blinking indicator LED red
   while (true) {
     // setting color to red
     pixels.fill(0xFF0000);
     pixels.show();
     delay(500);
+    // turning off LED
     pixels.fill(0x000000);
     pixels.show();
     delay(500);

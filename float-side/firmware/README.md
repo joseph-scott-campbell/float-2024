@@ -8,6 +8,17 @@ The float needs to be able to do the following tasks
 - [x] Communicate depth/time back to surface station after each profile
 - [x] Communicate information about the team and the current UTC time to surface
 
+# Indicator LEDs
+
+There is an indicator LED on the Adafruit Py QT. This chart shows what each behavior means.
+
+| LED Color    | Meaning                |
+|--------------|------------------------|
+| Blinking Red | Hall effect timeout    |
+| Blue         | Awaiting communication |
+| Green        | Received communicating |
+| Purple       | Doing profile          |
+
 # Libraries Being Used
 
 ## [ArduinoWebsockets](https://www.arduino.cc/reference/en/libraries/websockets/)
