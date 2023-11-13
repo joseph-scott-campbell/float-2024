@@ -117,7 +117,7 @@ void loop() {
         String message = "[";
         message = message + depth_data[0];
         for (int i = 1; i < recording_cycle; i++) {
-          message = message + ", ";
+          message = message + ",";
           message = message + depth_data[i];
         }
         message = message + "]";
@@ -159,7 +159,6 @@ void ascend() {
   unsigned short counter = 0;
   while (not(hall_effect_triggered) && counter < TIMEOUT) {
     counter++;
-    Serial.println(counter);
     delay(1);
   }
   if (counter >= TIMEOUT - 1) {
