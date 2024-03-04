@@ -5,11 +5,14 @@
 #include <Adafruit_NeoPixel.h>
 
 // motor driver pins
-#define PHASE 9
-#define ENABLE 8
+#define PHASE 8
+#define ENABLE 9
 
 // hall effect sensor pins
 #define HALL_EFFECT 18
+
+// how long to wait before reading from hall effect sensor
+#define READ_DELAY 4000
 
 // how long it will wait before reciving input from hall effect sensor
 // will enter fail state if it waits past the timeout
@@ -38,6 +41,7 @@ void IRAM_ATTR record_depth() {
   depth_data[recording_cycle] = 35;
   recording_cycle++;
 }
+
 
 void hall_effect() {
   // DO NOT REMOVE FUNCTION
@@ -71,6 +75,7 @@ void setup() {
 
   Serial.begin(115200);
   // Connect to wifi
+  WiFi.setHostname("Sunk Robotics Float");
   WiFi.begin(ssid, password);
 
   // Wait some time to connect to wifi
@@ -87,7 +92,14 @@ void setup() {
   server.listen(80);
   Serial.print("Is server live? ");
   Serial.println(server.available());
+
+  // print the received signal strength:
+  long rssi = WiFi.RSSI();
+  Serial.print("signal strength (RSSI):");
+  Serial.print(rssi);
+  Serial.println(" dBm");
 }
+
 
 void loop() {
   pixels.fill(0x0000FF);
@@ -132,6 +144,7 @@ void loop() {
   }
 }
 
+
 void profile() {
   // setting color to purple to indicate
   pixels.fill(0xFF00FF);
@@ -149,11 +162,15 @@ void profile() {
   ascend();  // pusing piston out
 }
 
-void ascend() {  
+
+void ascend() {
+  detachInterrupt(digitalPinToInterrupt(HALL_EFFECT));
   hall_effect_triggered = false;
   digitalWrite(PHASE, LOW);
   digitalWrite(ENABLE, HIGH);
   Serial.println(hall_effect_triggered);
+  delay(READ_DELAY);
+  attachInterrupt(digitalPinToInterrupt(HALL_EFFECT), hall_effect, FALLING);
 
   // continuing to move piston until hall effect or timeout
   unsigned short counter = 0;
@@ -166,12 +183,16 @@ void ascend() {
   }
 }
 
+
 void descend() {
+  detachInterrupt(digitalPinToInterrupt(HALL_EFFECT));
   hall_effect_triggered = false;
   digitalWrite(PHASE, HIGH);
   digitalWrite(ENABLE, HIGH);
-  Serial.println("foo");
   Serial.println(hall_effect_triggered);
+  delay(READ_DELAY);
+  attachInterrupt(digitalPinToInterrupt(HALL_EFFECT), hall_effect, FALLING);
+
 
   // continuing to move piston until hall effect or timeout
   unsigned short counter = 0;
@@ -183,6 +204,7 @@ void descend() {
     fail_state();
   }
 }
+
 
 void fail_state() {
   // stops motor from moving and doing dammage
