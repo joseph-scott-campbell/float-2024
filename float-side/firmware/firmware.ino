@@ -9,10 +9,8 @@
 #define ENABLE 9
 
 // hall effect sensor pins
-#define HALL_EFFECT 18
-
-// how long to wait before reading from hall effect sensor
-#define READ_DELAY 4000
+#define HALL_EFFECT_1 18
+#define HALL_EFFECT_2 17
 
 // how long it will wait before reciving input from hall effect sensor
 // will enter fail state if it waits past the timeout
@@ -28,28 +26,39 @@ hw_timer_t* recording_timer = NULL;
 unsigned short depth_data[1000];  // array where depth data will be kept
 uint8_t recording_cycle = 0;      // keep track of what index to write to
 
-bool hall_effect_triggered = false;
+bool hall_effect_triggered_1 = false;
+bool hall_effect_triggered_2 = false;
 Adafruit_NeoPixel pixels(1, PIN_NEOPIXEL, NEO_GRB + NEO_KHZ800);
 
+bool going_up;
 
 void IRAM_ATTR record_depth() {
   // get depth data
   // still waiting for proper cable to arrive
-  
+
   // depth data is stored in 1 dimension
   // data is sampled in 5 second increments
   depth_data[recording_cycle] = 35;
   recording_cycle++;
 }
 
-
-void hall_effect() {
+void hall_effect_1() {
   // DO NOT REMOVE FUNCTION
   // WILL CAUSE HARDWARE DAMMAGE
-  digitalWrite(ENABLE, LOW);
-  hall_effect_triggered = true;
+  if (going_up) {
+    digitalWrite(ENABLE, LOW);
+    hall_effect_triggered_1 = true;
+  }
 }
 
+void hall_effect_2() {
+  // DO NOT REMOVE FUNCTION
+  // WILL CAUSE HARDWARE DAMMAGE
+  if (not(going_up)) {
+    digitalWrite(ENABLE, LOW);
+    hall_effect_triggered_2 = true;
+  }
+}
 
 void setup() {
   // setting up interupts
@@ -61,7 +70,8 @@ void setup() {
 
   // setting up hall effect sensor interrupt
   // DO NOT REMOVE, WILL CAUSE HARDWARE DAMMAGE
-  attachInterrupt(digitalPinToInterrupt(HALL_EFFECT), hall_effect, FALLING);
+  attachInterrupt(digitalPinToInterrupt(HALL_EFFECT_1), hall_effect_1, FALLING);
+  attachInterrupt(digitalPinToInterrupt(HALL_EFFECT_2), hall_effect_2, FALLING);
 
   pinMode(NEOPIXEL_POWER, OUTPUT);
   digitalWrite(NEOPIXEL_POWER, HIGH);
@@ -92,14 +102,7 @@ void setup() {
   server.listen(80);
   Serial.print("Is server live? ");
   Serial.println(server.available());
-
-  // print the received signal strength:
-  long rssi = WiFi.RSSI();
-  Serial.print("signal strength (RSSI):");
-  Serial.print(rssi);
-  Serial.println(" dBm");
 }
-
 
 void loop() {
   pixels.fill(0x0000FF);
@@ -144,13 +147,11 @@ void loop() {
   }
 }
 
-
 void profile() {
   // setting color to purple to indicate
   pixels.fill(0xFF00FF);
   pixels.show();
 
-  hall_effect_triggered = false;
   // this function works because of hall_effect() interrupt
   // DON'T GET RID OF hall_effect() INTERRUPT
   // WILL CAUSE HARDWARE DAMMAGE
@@ -162,19 +163,24 @@ void profile() {
   ascend();  // pusing piston out
 }
 
-
 void ascend() {
-  detachInterrupt(digitalPinToInterrupt(HALL_EFFECT));
-  hall_effect_triggered = false;
+  going_up = true;
+  Serial.println("ascending");
+  pixels.fill(0xFFFFFF);
+  pixels.show();
+
+  detachInterrupt(digitalPinToInterrupt(HALL_EFFECT_1));
+  hall_effect_triggered_1 = false;
   digitalWrite(PHASE, LOW);
   digitalWrite(ENABLE, HIGH);
-  Serial.println(hall_effect_triggered);
-  delay(READ_DELAY);
-  attachInterrupt(digitalPinToInterrupt(HALL_EFFECT), hall_effect, FALLING);
+  delay(4000);
+  Serial.println(hall_effect_triggered_1);
+  attachInterrupt(digitalPinToInterrupt(HALL_EFFECT_1), hall_effect_1, FALLING);
+
 
   // continuing to move piston until hall effect or timeout
   unsigned short counter = 0;
-  while (not(hall_effect_triggered) && counter < TIMEOUT) {
+  while (not(hall_effect_triggered_1) && counter < TIMEOUT){
     counter++;
     delay(1);
   }
@@ -182,21 +188,24 @@ void ascend() {
     fail_state();
   }
 }
-
 
 void descend() {
-  detachInterrupt(digitalPinToInterrupt(HALL_EFFECT));
-  hall_effect_triggered = false;
+  going_up = false;
+  Serial.println("descend");
+  pixels.fill(0x00FFFF);
+  pixels.show();
+
+  detachInterrupt(digitalPinToInterrupt(HALL_EFFECT_2));
+  hall_effect_triggered_2 = false;
   digitalWrite(PHASE, HIGH);
   digitalWrite(ENABLE, HIGH);
-  Serial.println(hall_effect_triggered);
-  delay(READ_DELAY);
-  attachInterrupt(digitalPinToInterrupt(HALL_EFFECT), hall_effect, FALLING);
+  delay(4000);
+  attachInterrupt(digitalPinToInterrupt(HALL_EFFECT_2), hall_effect_2, FALLING);
 
 
   // continuing to move piston until hall effect or timeout
   unsigned short counter = 0;
-  while (not(hall_effect_triggered) && counter < TIMEOUT) {
+  while (not(hall_effect_triggered_2) && counter < TIMEOUT) {
     counter++;
     delay(1);
   }
@@ -204,7 +213,6 @@ void descend() {
     fail_state();
   }
 }
-
 
 void fail_state() {
   // stops motor from moving and doing dammage
