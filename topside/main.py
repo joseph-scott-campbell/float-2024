@@ -28,7 +28,7 @@ def graph_data(data_string):
 
 
 def communicate():
-    with connect("ws://localhost:8765") as websocket:
+    with connect("ws://10.1.57.37") as websocket:
         user_input = input("> ")
         websocket.send(user_input)
         message = websocket.recv()

@@ -1,3 +1,20 @@
+// INPUTS FOR MD10A MOTOR DRIVER
+//
+// 12v OUT (Motor OUT)
+//----------
+// IN_2 HIGH
+// IN_1 LOW
+//
+// -12v OUT (Motor IN)
+//----------
+// IN_2 LOW
+// IN_1 HIGH
+//
+// 0v OUT (Stop)
+//----------
+// IN_2 HIGH
+// IN_1 HIGH
+
 // code is written in chronological order
 // fairily massive libraries, but ESP32-S2 can handle it
 #include <ArduinoWebsockets.h>
@@ -5,12 +22,12 @@
 #include <Adafruit_NeoPixel.h>
 
 // motor driver pins
-#define PHASE 8
-#define ENABLE 9
+#define IN_1 9
+#define IN_2 10
 
 // hall effect sensor pins
-#define HALL_EFFECT_1 18
-#define HALL_EFFECT_2 17
+#define HALL_EFFECT_1 5
+#define HALL_EFFECT_2 6
 
 // how long it will wait before reciving input from hall effect sensor
 // will enter fail state if it waits past the timeout
@@ -19,18 +36,14 @@
 using namespace websockets;
 WebsocketsServer server;
 
-const char* ssid = "TP-Link_51CA";  // put SSID here
-const char* password = "password";  // put password here
+const char* ssid = "penis";         // put SSID here
+const char* password = "balls123";  // put password here
 
 hw_timer_t* recording_timer = NULL;
 unsigned short depth_data[1000];  // array where depth data will be kept
 uint8_t recording_cycle = 0;      // keep track of what index to write to
 
-bool hall_effect_triggered_1 = false;
-bool hall_effect_triggered_2 = false;
 Adafruit_NeoPixel pixels(1, PIN_NEOPIXEL, NEO_GRB + NEO_KHZ800);
-
-bool going_up;
 
 void IRAM_ATTR record_depth() {
   // get depth data
@@ -42,24 +55,6 @@ void IRAM_ATTR record_depth() {
   recording_cycle++;
 }
 
-void hall_effect_1() {
-  // DO NOT REMOVE FUNCTION
-  // WILL CAUSE HARDWARE DAMMAGE
-  if (going_up) {
-    digitalWrite(ENABLE, LOW);
-    hall_effect_triggered_1 = true;
-  }
-}
-
-void hall_effect_2() {
-  // DO NOT REMOVE FUNCTION
-  // WILL CAUSE HARDWARE DAMMAGE
-  if (not(going_up)) {
-    digitalWrite(ENABLE, LOW);
-    hall_effect_triggered_2 = true;
-  }
-}
-
 void setup() {
   // setting up interupts
   // running record_depth() every 5 seconds
@@ -68,20 +63,18 @@ void setup() {
   timerAlarmWrite(recording_timer, 5000000, true);
   timerAlarmEnable(recording_timer);
 
-  // setting up hall effect sensor interrupt
-  // DO NOT REMOVE, WILL CAUSE HARDWARE DAMMAGE
-  attachInterrupt(digitalPinToInterrupt(HALL_EFFECT_1), hall_effect_1, FALLING);
-  attachInterrupt(digitalPinToInterrupt(HALL_EFFECT_2), hall_effect_2, FALLING);
-
   pinMode(NEOPIXEL_POWER, OUTPUT);
   digitalWrite(NEOPIXEL_POWER, HIGH);
 
   pixels.begin();
 
-
   // Setting up GPIO
-  pinMode(ENABLE, OUTPUT);
-  pinMode(PHASE, OUTPUT);
+  pinMode(IN_1, OUTPUT);
+  pinMode(IN_2, OUTPUT);
+
+  // Setting up hall effect
+  pinMode(HALL_EFFECT_1, INPUT);
+  pinMode(HALL_EFFECT_2, INPUT);
 
   Serial.begin(115200);
   // Connect to wifi
@@ -155,60 +148,50 @@ void profile() {
   // this function works because of hall_effect() interrupt
   // DON'T GET RID OF hall_effect() INTERRUPT
   // WILL CAUSE HARDWARE DAMMAGE
-  descend();  // retracting piston
-
+  descend();  // extending piston
   // possible future feature update: use depth rather than time for sinking
   delay(10000);  // giving float 10 seconds to sink
-
-  ascend();  // pusing piston out
+  ascend();      // retracting piston out
+  delay(10000);
+  descend();  // extending piston
 }
 
 void ascend() {
-  going_up = true;
+  digitalWrite(IN_1, HIGH);
+  digitalWrite(IN_2, LOW);
   Serial.println("ascending");
   pixels.fill(0xFFFFFF);
   pixels.show();
 
-  detachInterrupt(digitalPinToInterrupt(HALL_EFFECT_1));
-  hall_effect_triggered_1 = false;
-  digitalWrite(PHASE, LOW);
-  digitalWrite(ENABLE, HIGH);
-  delay(4000);
-  Serial.println(hall_effect_triggered_1);
-  attachInterrupt(digitalPinToInterrupt(HALL_EFFECT_1), hall_effect_1, FALLING);
-
-
   // continuing to move piston until hall effect or timeout
   unsigned short counter = 0;
-  while (not(hall_effect_triggered_1) && counter < TIMEOUT){
+  while (digitalRead(HALL_EFFECT_1) && counter < TIMEOUT) {
     counter++;
     delay(1);
   }
+  digitalWrite(IN_1, HIGH);
+  digitalWrite(IN_2, HIGH);
+
   if (counter >= TIMEOUT - 1) {
     fail_state();
   }
 }
 
 void descend() {
-  going_up = false;
+  digitalWrite(IN_1, LOW);
+  digitalWrite(IN_2, HIGH);
   Serial.println("descend");
   pixels.fill(0x00FFFF);
   pixels.show();
 
-  detachInterrupt(digitalPinToInterrupt(HALL_EFFECT_2));
-  hall_effect_triggered_2 = false;
-  digitalWrite(PHASE, HIGH);
-  digitalWrite(ENABLE, HIGH);
-  delay(4000);
-  attachInterrupt(digitalPinToInterrupt(HALL_EFFECT_2), hall_effect_2, FALLING);
-
-
   // continuing to move piston until hall effect or timeout
   unsigned short counter = 0;
-  while (not(hall_effect_triggered_2) && counter < TIMEOUT) {
+  while (digitalRead(HALL_EFFECT_2) && counter < TIMEOUT) {
     counter++;
     delay(1);
   }
+  digitalWrite(IN_1, HIGH);
+  digitalWrite(IN_2, HIGH);
   if (counter >= TIMEOUT - 1) {
     fail_state();
   }
@@ -216,7 +199,8 @@ void descend() {
 
 void fail_state() {
   // stops motor from moving and doing dammage
-  digitalWrite(ENABLE, LOW);
+  digitalWrite(IN_1, HIGH);
+  digitalWrite(IN_2, HIGH);
 
   // blinking indicator LED red
   while (true) {
