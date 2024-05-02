@@ -20,6 +20,8 @@
 #include <ArduinoWebsockets.h>
 #include <WiFi.h>
 #include <Adafruit_NeoPixel.h>
+#include <Wire.h>
+#include "MS5837.h"
 
 // motor driver pins
 #define IN_1 9
@@ -32,37 +34,31 @@
 // how long it will wait before reciving input from hall effect sensor
 // will enter fail state if it waits past the timeout
 #define TIMEOUT 30000
+#define DEPTH_CHECK_INTERVAL 5000
+
+// How long to float and how long to sink in ms
+#define TIME_FLOATING 10000
+#define TIME_SINKING 12000
 
 using namespace websockets;
 WebsocketsServer server;
 
-const char* ssid = "penis";         // put SSID here
-const char* password = "balls123";  // put password here
-
-hw_timer_t* recording_timer = NULL;
-unsigned short depth_data[1000];  // array where depth data will be kept
-uint8_t recording_cycle = 0;      // keep track of what index to write to
+const char* ssid = "TP-Link_51CA";  // put SSID here
+const char* password = "password";  // put password here
+// arrays where depth data will be kept
+float depth_data[1000]; 
+float pressure_data[1000];
+unsigned short recording_cycle = 0;  // keep track of what index to write to
 
 Adafruit_NeoPixel pixels(1, PIN_NEOPIXEL, NEO_GRB + NEO_KHZ800);
+MS5837 sensor;
 
-void IRAM_ATTR record_depth() {
-  // get depth data
-  // still waiting for proper cable to arrive
 
-  // depth data is stored in 1 dimension
-  // data is sampled in 5 second increments
-  depth_data[recording_cycle] = 35;
-  recording_cycle++;
-}
+// variables for storing time for depth sensor
+unsigned long depth_starting_time;
+unsigned long depth_current_time;
 
 void setup() {
-  // setting up interupts
-  // running record_depth() every 5 seconds
-  recording_timer = timerBegin(0, 80, true);
-  timerAttachInterrupt(recording_timer, &record_depth, true);
-  timerAlarmWrite(recording_timer, 5000000, true);
-  timerAlarmEnable(recording_timer);
-
   pinMode(NEOPIXEL_POWER, OUTPUT);
   digitalWrite(NEOPIXEL_POWER, HIGH);
 
@@ -95,6 +91,19 @@ void setup() {
   server.listen(80);
   Serial.print("Is server live? ");
   Serial.println(server.available());
+
+  Wire.begin();
+
+  while (!sensor.init()) {
+    Serial.println("Init failed!");
+    Serial.println("Are SDA/SCL connected correctly?");
+    Serial.println("Blue Robotics Bar30: White=SDA, Green=SCL");
+    Serial.println("\n\n\n");
+    delay(5000);
+  }
+
+  sensor.setModel(MS5837::MS5837_02BA);
+  sensor.setFluidDensity(997);  // kg/m^3 (freshwater, 1029 for seawater)
 }
 
 void loop() {
@@ -141,59 +150,91 @@ void loop() {
 }
 
 void profile() {
+  unsigned long starting_time = millis(); // time for delays in profile
+  //depth_starting_time = millis(); // time for measuring depth
   // setting color to purple to indicate
   pixels.fill(0xFF00FF);
   pixels.show();
 
-  // this function works because of hall_effect() interrupt
-  // DON'T GET RID OF hall_effect() INTERRUPT
-  // WILL CAUSE HARDWARE DAMMAGE
-  descend();  // extending piston
-  // possible future feature update: use depth rather than time for sinking
-  delay(10000);  // giving float 10 seconds to sink
-  ascend();      // retracting piston out
-  delay(10000);
-  descend();  // extending piston
+  move_piston_down();  // extending piston
+
+  // waiting TIME_FLOATING milliseconds
+  starting_time = millis();
+  while (not(time_check(starting_time, millis(), TIME_FLOATING))) {
+    check_depth();
+  }
+
+  move_piston_up();  // retracting piston
+
+  starting_time = millis();
+  while (not(time_check(starting_time, millis(), TIME_SINKING))) {
+    check_depth();
+  }
+
+  move_piston_down();  // extending piston
 }
 
-void ascend() {
+void move_piston_up() {
   digitalWrite(IN_1, HIGH);
   digitalWrite(IN_2, LOW);
-  Serial.println("ascending");
   pixels.fill(0xFFFFFF);
   pixels.show();
 
   // continuing to move piston until hall effect or timeout
-  unsigned short counter = 0;
-  while (digitalRead(HALL_EFFECT_1) && counter < TIMEOUT) {
-    counter++;
-    delay(1);
+  unsigned long piston_starting_time = millis();
+  while (digitalRead(HALL_EFFECT_1)) {
+    if (time_check(piston_starting_time, millis(), TIMEOUT)) {
+      fail_state();  // indefinate blocking
+    }
+    check_depth();
   }
+
   digitalWrite(IN_1, HIGH);
   digitalWrite(IN_2, HIGH);
-
-  if (counter >= TIMEOUT - 1) {
-    fail_state();
-  }
 }
 
-void descend() {
+void move_piston_down() {
   digitalWrite(IN_1, LOW);
   digitalWrite(IN_2, HIGH);
-  Serial.println("descend");
   pixels.fill(0x00FFFF);
   pixels.show();
 
   // continuing to move piston until hall effect or timeout
-  unsigned short counter = 0;
-  while (digitalRead(HALL_EFFECT_2) && counter < TIMEOUT) {
-    counter++;
-    delay(1);
+  unsigned long piston_starting_time = millis();
+  while (digitalRead(HALL_EFFECT_2)) {
+    if (time_check(piston_starting_time, millis(), TIMEOUT)) {
+      fail_state();  // indefinate blocking
+    }
+    check_depth();
   }
+
+  Serial.println("hall effect detected");
+
   digitalWrite(IN_1, HIGH);
-  digitalWrite(IN_2, HIGH);
-  if (counter >= TIMEOUT - 1) {
-    fail_state();
+  digitalWrite(IN_2, HIGH);  
+}
+
+void check_depth() {
+  if (time_check(depth_starting_time, depth_current_time, DEPTH_CHECK_INTERVAL)) {
+    // restarting count for checking depth
+    depth_starting_time = millis();
+
+    // check to stop overflow
+    //if (recording_cycle >= sizeof(depth_data) / sizeof(depth_data[1]) || recording_cycle >= sizeof(pressure_data) / sizeof(pressure_data[1])) {
+    //  recording_cycle = 0;
+    //}
+    depth_data[recording_cycle] = sensor.depth();
+    pressure_data[recording_cycle] = sensor.pressure();
+    recording_cycle++;
+    Serial.println("wrote");
+  }
+}
+
+bool time_check(unsigned long starting_time, unsigned long current_time, unsigned long target_time) {
+  if (current_time - starting_time >= target_time) {
+    return (true);
+  } else {
+    return (false);
   }
 }
 
