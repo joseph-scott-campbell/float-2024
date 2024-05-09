@@ -43,8 +43,8 @@
 using namespace websockets;
 WebsocketsServer server;
 
-const char* ssid = "TP-Link_51CA";  // put SSID here
-const char* password = "password";  // put password here
+const char* ssid = "sunk";  // put SSID here
+const char* password = "sunksunk";  // put password here
 
 Adafruit_NeoPixel pixels(1, PIN_NEOPIXEL, NEO_GRB + NEO_KHZ800);
 MS5837 sensor;
