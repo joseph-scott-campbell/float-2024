@@ -28,14 +28,18 @@ def graph_data(data_string):
 
 
 def communicate():
-    with connect("ws://10.1.57.37") as websocket:
+    with connect("ws://10.1.57.4") as websocket:
         user_input = input("> ")
         websocket.send(user_input)
         message = websocket.recv()
         print("< " + message)
 
-        if user_input == "get_data":
+        if user_input == "get_depth":
             graph_data(message)
+        elif user_input == "profile":
+            exit()
+        elif user_input == "break":
+            exit()
 
 
 while True:
