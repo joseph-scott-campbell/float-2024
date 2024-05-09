@@ -10,6 +10,9 @@
 #define CURRENT_STATE 1  // store what state it is in for error recovery
 #define DATA_START 2     // store data starting here and ending at end of EEPROM
 
+#define COMPANY_NUMBER "1337"  // returned from
+#define FLOAT_HEIGHT 61        // height of float in cm, used to convert depth from measuring at top to measuring at bottom
+
 /* breadboard
 #define M2 6
 #define M1 5
@@ -40,8 +43,8 @@
 using namespace websockets;
 WebsocketsServer server;
 
-const char* ssid = "penis";         // put SSID here
-const char* password = "balls123";  // put password here
+const char* ssid = "TP-Link_51CA";  // put SSID here
+const char* password = "password";  // put password here
 
 Adafruit_NeoPixel pixels(1, PIN_NEOPIXEL, NEO_GRB + NEO_KHZ800);
 MS5837 sensor;
@@ -52,6 +55,7 @@ uint32_t depth_check;
 uint32_t wait_check;
 uint8_t depth_counter;
 bool recovering_from_error = false;
+unsigned long time_since_start;
 
 void drive(uint8_t dir) {
   if (dir == DOWN) {
@@ -92,7 +96,7 @@ void store_depth() {
   if (raw_data < 0) {
     raw_data = 0;
   }
-  uint8_t data = uint8_t((raw_data * 100) / 5);
+  uint8_t data = uint8_t(((raw_data * 100) + FLOAT_HEIGHT) / 5);
   Serial.println(raw_data * 5);
   Serial.println(data);
 
@@ -131,6 +135,7 @@ void setup() {
   sensor.setModel(MS5837::MS5837_02BA);
   sensor.setFluidDensity(997);  // kg/m^3 (freshwater, 1029 for seawater)
 
+  time_since_start = millis();
 
   // if it crashes in a floating sinking or waiting state resume
   // otherwise home
@@ -204,9 +209,9 @@ void loop() {
             client.close();
             drive(UP);
             state = SINK;
-          } else if (msg.data() == "get_data") {
+          } else if (msg.data() == "get_depth") {
             String message = "[";
-            depth_counter = EEPROM.read(0);
+            depth_counter = EEPROM.read(COUNTER_ADDR);
             message = message + String(EEPROM.read(DATA_START) * 5);
             for (int i = DATA_START + 1; i < depth_counter; i++) {
               message = message + ",";
@@ -220,11 +225,11 @@ void loop() {
             state = COMMUNICATE;
           } else if (msg.data() == "get_pressure") {
             String message = "[";
-            depth_counter = EEPROM.read(0);
-            message = message + String(EEPROM.read(DATA_START) * 5);
+            depth_counter = EEPROM.read(COUNTER_ADDR);
+            message = message + String(float((EEPROM.read(DATA_START) * 5)) * 997.0474 * 9.80665);
             for (int i = DATA_START + 1; i < depth_counter; i++) {
               message = message + ",";
-              message = message + String(float((EEPROM.read(i) * 5)) * 997.0474);
+              message = message + String(float((EEPROM.read(i) * 5)) * 997.0474 * 9.80665);
             }
 
             message = message + "]";
@@ -235,8 +240,13 @@ void loop() {
             depth_counter = DATA_START;
             EEPROM.write(COUNTER_ADDR, depth_counter);
             EEPROM.commit();
+            client.close();
+          } else if (msg.data() == "get_info") {
+            String message = String("Company Number: 1337");
+            message = message + " | " + "Uptime (Seconds): " + String(millis() / 1000) + " | " + "Time Recording (Seconds): " + String(EEPROM.read(COUNTER_ADDR) * 5);
+            client.send(message);
           } else if (msg.data() == "help") {
-            client.send("JENA - the Sunk Robotics vertically profiling float\nCommands:\n\t* profile - float will do a vertical profile\n\t* get_data - Send depth data stored in EEPROM in centimeters (accurate to 5cm)\n\t* clear_data - Clear data in EEPROM and collect fresh data\n\t* help - print this message");
+            client.send("JENA - the Sunk Robotics vertically profiling float\nCommands:\n\t* profile - float will do a vertical profile\n\t* get_info - returns uptime and company number\n\t* get_depth - Send depth data stored in EEPROM in centimeters (accurate to 5cm)\n\t* get_pressure - return pressure data stored in EEPROM\n\t* clear_data - Clear data in EEPROM and collect fresh data\n\t* break - exit gracefully without profile\n\t* help - print this message");
             client.close();
           } else if (msg.data() == "break") {
             client.send("goodbye");

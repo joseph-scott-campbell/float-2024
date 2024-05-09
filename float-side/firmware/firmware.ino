@@ -24,12 +24,12 @@
 #include "MS5837.h"
 
 // motor driver pins
-#define IN_1 9
-#define IN_2 10
+#define IN_1 5
+#define IN_2 6
 
 // hall effect sensor pins
-#define HALL_EFFECT_1 5
-#define HALL_EFFECT_2 6
+#define HALL_EFFECT_1 12
+#define HALL_EFFECT_2 11
 
 // how long it will wait before reciving input from hall effect sensor
 // will enter fail state if it waits past the timeout
@@ -175,6 +175,7 @@ void profile() {
 }
 
 void move_piston_up() {
+  Serial.println("moving up");
   digitalWrite(IN_1, HIGH);
   digitalWrite(IN_2, LOW);
   pixels.fill(0xFFFFFF);
@@ -194,6 +195,7 @@ void move_piston_up() {
 }
 
 void move_piston_down() {
+  Serial.println("moving down");
   digitalWrite(IN_1, LOW);
   digitalWrite(IN_2, HIGH);
   pixels.fill(0x00FFFF);
