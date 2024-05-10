@@ -43,7 +43,7 @@
 using namespace websockets;
 WebsocketsServer server;
 
-const char* ssid = "sunk";  // put SSID here
+const char* ssid = "sunk";          // put SSID here
 const char* password = "sunksunk";  // put password here
 
 Adafruit_NeoPixel pixels(1, PIN_NEOPIXEL, NEO_GRB + NEO_KHZ800);
@@ -242,7 +242,7 @@ void loop() {
             EEPROM.commit();
             client.close();
           } else if (msg.data() == "get_info") {
-            String message = String("Company Number: 1337");
+            String message = String("Company Number: RN1337");
             message = message + " | " + "Uptime (Seconds): " + String(millis() / 1000) + " | " + "Time Recording (Seconds): " + String(EEPROM.read(COUNTER_ADDR) * 5);
             client.send(message);
           } else if (msg.data() == "help") {
@@ -268,6 +268,14 @@ void loop() {
       if (digitalRead(HB) == TRIP) {
         drive(STOP);
         state = COMMUNICATE;
+        for (int i = 0; i < 5000; i++) {
+          if (time_now - depth_check >= DEPTH_INTERVAL) {
+            //read sensor
+            store_depth();
+            depth_check = time_now;
+          }
+          delay(1);
+        }
       }
       break;
     case SINK:
